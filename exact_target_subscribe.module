@@ -1,0 +1,273 @@
+<?php
+
+require('include/exacttarget_soap_client.php');
+
+/**
+ * @file
+ * This is the primary module file for ExactTarget.
+ *
+ * This allows for interaction with the ExactTarget API.
+ */
+
+/**
+ * Implements hook_perm().
+ */
+function exact_target_subscribe_perm() {
+    return array('Configure Exact Target Subscribe' );
+}
+
+/**
+ * Implements hook_admin_settings_form
+ */
+function exact_target_subscribe_admin_settings_form() {
+  $form = array();
+  $form['exact_target_subscribe_username'] = array(
+    '#title' => t('Configure Exact Target Username'),
+    '#description' => t('Enter your Exact Target username'),
+    '#type' => 'textfield',
+    '#default_value' => variable_get( 'exact_target_subscribe_username', "" ),
+    '#required' => TRUE,
+  );
+  $form['exact_target_subscribe_password'] = array(
+    '#title' => t('Configure Exact Target Password'),
+    '#description' => t('Enter your Exact Target password'),
+    '#type' => 'textfield',
+    '#default_value' => variable_get( 'exact_target_subscribe_password', "" ),
+    '#required' => TRUE,
+  );
+
+  $results = getSubscriberList(variable_get( 'exact_target_subscribe_username', "" ),variable_get( 'exact_target_subscribe_password', "" ));
+  if($results->OverallStatus !='OK'){
+	drupal_set_message("Please add Username and password");
+  }
+  else{	  
+		foreach($results->Results as $key=>$list){
+		 $lists[$list->ID] = $list->ListName;
+		}
+		$form['exact_target_subscribe_list'] = array(
+			'#type' => 'checkboxes',
+			'#title' => t("List Blocks"),
+			'#description' => t("Select the lists for which you would like to generate subscription blocks."),
+			'#default_value' => variable_get( 'exact_target_subscribe_list', array()),
+			'#options' => $lists,
+			'#required' => TRUE
+		);
+  }
+  $form = system_settings_form( $form );
+  $form['#submit'][] = 'exact_target_subscribe_admin_settings_form_submit';
+  return $form;
+}
+
+/**
+ * Implements hook_submit().
+ *
+ * Submit handler for the settings page, currently this only clears the cache.
+ */
+
+function exact_target_subscribe_admin_settings_form_submit( $form, $form_state ) {	
+//Using for submit ;
+
+}
+
+/**
+ * Implements hook_menu().
+ */
+function exact_target_subscribe_menu() {
+  $items = array();
+  $items['admin/settings/exact_target_subscribe'] = array(
+    'title'         => 'Exact Target Configuration',
+    'description'   => 'Configuration for Exact Target Subscribe',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array( 'exact_target_subscribe_admin_settings_form' ),
+    'access arguments' => array( 'Configure Exact Target Subscribe' ),
+  );
+
+  return $items;
+}
+
+/**
+ * Implements hook_block_info().
+ *
+ * This function tells drupal about our block.
+ *
+ * For more information on this function, see:
+ */
+function exact_target_subscribe_block_info() {
+	$blocks = array();
+	$blocks['exact_target_subscribe_form'] = array(
+			'info' => t('ExactTarget Subscribe Block'),
+			// 'cache' how this block will be cached
+			'cache' => DRUPAL_CACHE_GLOBAL,
+	);
+	return $blocks;
+}
+/**
+ * Implements hook_block_view().
+ * 
+ * This function tells drupal how to define our block when viewed.
+ *
+ * For more information on this function, see:
+ * http://api.drupal.org/api/drupal/modules block block.api.php/function/hook_block_view/7
+ */
+function exact_target_subscribe_block_view($delta = '') {
+	$block = array();
+	switch($delta) {
+			case 'exact_target_subscribe_form':
+					$block['subject'] = t('ExactTarget Subscribe Block');
+					$block['content'] = drupal_get_form('exact_target_subscribe_form');
+			break;
+	}
+	return $block;
+}
+
+/**
+ * Define the form to be returned.
+ *
+ * Note that drupal passes in two parameters,
+ * $form - which holds all of the elements of the form
+ * $form_state - a special array of settings & values needed by Drupal
+ */
+function exact_target_subscribe_form($form, &$form_state) {
+
+        $form['subscriber_first_name'] = array(                
+			'#type' => 'textfield',                
+			'#required' => TRUE,                
+			'#title' => t("First Name"),                
+			'#description' => t('Enter You First name'),
+        ); 
+        $form['subscriber_email'] = array(                
+			'#type' => 'textfield',                
+			'#required' => TRUE,                
+			'#title' => t("Email"),                
+			'#description' => t('Must be a valid email address'),
+        );
+ 
+        $form['submit'] = array(
+                '#type' => 'submit',
+                // #value is the text to display inside the button
+                '#value' => t('Subscribe'),
+        );
+ 
+        return $form;
+}
+/*
+ * Define a validation function that drupal will
+ * automatically call when the submit button is pressed.
+ *
+ * For this example, I will use the valid_email_address()
+ * function to verify that the email address looks
+ * proper.  If it's not, we'll use form_set_error()
+ * function to tell drupal we didn't pass validation.
+ */
+function exact_target_subscribe_form_validate($form, &$form_state) {
+        $email = $form_state['values']['subscriber_email']; 
+        if(valid_email_address($email) == 0) {
+                form_set_error('subscriber_email', t('Not a valid email address'));
+        }
+}
+
+/*
+ * Define a submit funciton that drupal will
+ * automatically call when submit is pressed (and all validators pass)
+ */
+function exact_target_subscribe_form_submit($form, &$form_state) {		
+		toAddEmailIdToET($form_state);
+}
+
+
+//******** getSubscriberList Form ExactTarget account ******//
+function getSubscriberList($username,$password){ 
+	try{
+		$wsdl = "https://webservice.exacttarget.com/etframework.wsdl";
+		/* Create the Soap Client */
+		$client = new ExactTargetSoapClient($wsdl, array('trace'=>1));
+		$client->username = $username;
+		$client->password = $password;
+
+		$rr = new ExactTarget_RetrieveRequest();
+				$rr->ObjectType = "List";
+				$rr->Properties =  array();
+				$rr->Properties[] = "ID";
+				$rr->Properties[] = "List.ListName";
+				$rr->Options = NULL;
+
+				$rrm = new ExactTarget_RetrieveRequestMsg();
+				$rrm->RetrieveRequest = $rr;
+
+				$results = $client->Retrieve($rrm);
+					return $results; 
+
+	} catch (SoapFault $e) {
+				return($e);
+	}
+
+	
+}
+/********* to add subscriber_email in ExactTarget account *********/
+// This call will create a Subscriber record if one does not exist.
+// If a record already exists with that key value (Email Address by default or Subscriber Key if enabled) then it will update.
+
+function toAddEmailIdToET($form_state){
+	try{		
+		$username = variable_get( 'exact_target_subscribe_username', "" );
+		$password = variable_get( 'exact_target_subscribe_password', "" );
+		$subscriberkey = variable_get( 'exact_target_subscribe_key', "" );
+		$slectedListIds = variable_get( 'exact_target_subscribe_list', array());
+
+		$emailId = $form_state['values']['subscriber_email'];
+		$firstName = $form_state['values']['subscriber_first_name'];
+		
+		$wsdl = "https://webservice.exacttarget.com/etframework.wsdl";		
+		$client = new ExactTargetSoapClient($wsdl, array('trace'=>1));
+		$client->username = $username;
+		$client->password = $password;
+
+		$subscriber = new ExactTarget_Subscriber();
+		$subscriber->EmailAddress = $emailId;
+		
+		$subscriber->SubscriberKey = $emailId;
+
+		$FirstNameAttribute = new ExactTarget_Attribute();
+		$FirstNameAttribute->Name = "First Name";
+		$FirstNameAttribute->Value = $firstName;
+
+		$LastNameAttribute = new ExactTarget_Attribute();
+		$LastNameAttribute->Name = "Last Name";
+		$LastNameAttribute->Value = "";
+
+		$subscriber->Attributes=array($FirstNameAttribute,$LastNameAttribute);
+
+		$subscriber->Lists = array();
+		foreach($slectedListIds as $slectedListId){
+			if($slectedListId!=0){
+				$list = new ExactTarget_SubscriberList(); 
+				$list->ID = $slectedListId; 
+				$subscriber->Lists[] = $list;
+			}
+		}
+		
+		
+
+		$so = new ExactTarget_SaveOption();
+		$so->PropertyName = "*";
+		$so->SaveAction = ExactTarget_SaveAction::UpdateAdd;
+		$soe = new SoapVar($so, SOAP_ENC_OBJECT, 'SaveOption', "http://exacttarget.com/wsdl/partnerAPI");
+		$opts = new ExactTarget_UpdateOptions();
+		$opts->SaveOptions = array($soe);
+
+		$object = new SoapVar($subscriber, SOAP_ENC_OBJECT, 'Subscriber', "http://exacttarget.com/wsdl/partnerAPI");
+
+		$request = new ExactTarget_CreateRequest();
+		$request->Options = $opts;
+		$request->Objects = array($object);
+		$results = $client->Create($request);
+		drupal_set_message(t($firstName .' Subscribed successful.'), 'status');
+		//print_r($results);
+
+	} catch (SoapFault $e) {
+				drupal_set_message("Error occured:".$e);
+	}
+}
+
+
+

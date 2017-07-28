@@ -1,0 +1,12 @@
+; $Id: exact_target_subscribe.info,v 1.1 2014/09/09 23:42:33 exodist Exp $
+name = ExactTargetSubscribe
+description = "Exact Target Subscription Block"
+package ="ExactTarget"
+core = 7.x
+
+
+; Information added by drupal.org packaging script on 2014-09-09
+
+project = "exact_target_subscribe"
+datestamp = "1248220520"
+

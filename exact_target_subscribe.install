@@ -1,0 +1,47 @@
+<?php
+
+
+/**
+ * @file
+ * This is the install file for ExactTarget.
+ *
+ * This creates the database tables for holding queued list subscriptions.
+ */
+
+function exact_target_subscribe_schema() {
+  $schema['exact_target_subscribe_admin_info'] = array(
+    'description' => t("Table to hold pending subscriptions"),
+    'fields' => array(
+      'id' => array(
+        'description' => t('Pending subscription ID'),
+        'type' => 'serial',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'username' => array(
+        'description' => t('User Name'),
+        'type' => 'text',
+      ),
+      'password' => array(
+        'description' => t('Password'),
+        'type' => 'text',
+      ),	  
+      'listId' => array(
+        'description' => t('list ID'),
+        'type' => 'int',
+        'not null' => TRUE,
+      ),
+
+    ),
+    'primary key' => array('id'),
+  );  
+  return $schema;
+}
+
+function exact_target_subscribe_install() {
+  drupal_install_schema('exact_target');
+}
+
+function exact_target_subscribe_uninstall() {
+  drupal_uninstall_schema('exact_target');
+}
